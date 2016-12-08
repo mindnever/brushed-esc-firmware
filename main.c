@@ -1,4 +1,3 @@
-#define F_CPU 8000000UL   //CPU-freq
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
@@ -73,22 +72,17 @@ int main(void)
     INIT_IN(Rcp_In);
     
     
-    uint16_t timeUPStart = 0;
-    uint16_t timeUPEnd = 0;
+    uint16_t TCNTstart = 0;
     uint16_t Pulse = 0;
     
     // 1MHz timer clock = 1uS precission
-    // TIMER1: need to measure servo pulses in microseconds (4000uS)
     
     TCCR1A = 0;
     TCCR1B = _BV(CS11); // prescaler: clock/8
     TIMSK = _BV(TOIE1); // overflow interrupt enable
     
     
-    sei();
-    
-    uint8_t trigged = 0;
-    
+    uint8_t edge = 0;
     uint8_t forward = 0;
     
     uint16_t PWMMargin = 15;
@@ -98,15 +92,14 @@ int main(void)
 
     while(1) {
         
-        if (!trigged && IN(Rcp_In)) {
-            timeUPStart = TCNT1;        /* capture the time when the signal when high*/
-            trigged = 1;
+        if (!edge && IN(Rcp_In)) {
+            TCNTstart = TCNT1;        /* capture the time when the signal when high*/
+            edge = 1;
         }
 
-        if (trigged && !IN(Rcp_In)) {
-            timeUPEnd = TCNT1;  /* capture when the pulse goes low */
-            uint16_t p = (timeUPEnd - timeUPStart);
-            trigged = 0;
+        if (edge && !IN(Rcp_In)) {
+            uint16_t p = (TCNT1 - TCNTstart);
+            edge = 0;
             
             if((p < PWMMin) || (p > PWMMax)) {
 
@@ -161,9 +154,4 @@ int main(void)
             
         }
     }
-}
-
-ISR (TIMER1_OVF_vect)
-{
-    
 }
