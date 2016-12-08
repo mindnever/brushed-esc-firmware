@@ -51,6 +51,8 @@
 
 #define IN(x) (PIN(_CONCAT(x, _PORT)) & (1 << (x ## _PIN)))
 
+static volatile uint8_t overflow = 0;
+
 int main(void)
 {
     OFF(CpFET);
@@ -71,7 +73,9 @@ int main(void)
     
     INIT_IN(Rcp_In);
     
-    
+
+    /* USE C & B fets for switching */
+
     uint16_t TCNTstart = 0;
     uint16_t Pulse = 0;
     
@@ -81,6 +85,7 @@ int main(void)
     TCCR1B = _BV(CS11); // prescaler: clock/8
     TIMSK = _BV(TOIE1); // overflow interrupt enable
     
+    sei();
     
     uint8_t edge = 0;
     uint8_t forward = 0;
@@ -99,11 +104,13 @@ int main(void)
 
         if (edge && !IN(Rcp_In)) {
             uint16_t p = (TCNT1 - TCNTstart);
+            uint8_t valid = 1;
+            
             edge = 0;
             
             if((p < PWMMin) || (p > PWMMax)) {
 
-                Pulse = 0;
+                valid = 0;
 
             } else if(p < (PWMMiddle - PWMMargin)) {
 
@@ -120,38 +127,70 @@ int main(void)
                 Pulse = 0;
             }
             
+            if(valid) {
+                overflow = 0;
+            }
+            
+        }
+        
+        if(overflow > 3) {
+            Pulse = 0;
         }
         
         /* pulse 0-512 */
         
-        uint8_t on = (TCNT1 & 0x1F) < Pulse;
+        uint8_t on = (TCNT1 & 0x1FF) < Pulse;
+
+//uint8_t on = TCNT1 & 0x10;
         
         if(!on) {
-
-            OFF(ApFET);
-            OFF(AnFET);
+#if 1
+            OFF(BpFET);
+            OFF(BnFET);
             OFF(CpFET);
             OFF(CnFET);
-
+#else
+            OFF(BpFET);
+            OFF(CpFET);
+            
+            _delay_us(5);
+            
+            ON(BnFET);
+            ON(CnFET);
+#endif
         } else if(forward) {
             // Forward //
 
-            OFF(AnFET);
-            OFF(CpFET);
             
-            ON(CnFET);
-            ON(ApFET);
+            OFF(BpFET);
+            OFF(CnFET);
+
+            _delay_us(5);
+            
+            ON(CpFET);
+            ON(BnFET);
+
             
         } else {
             
             // Reverse //
+            OFF(BnFET);
+            OFF(CpFET);
+
+            _delay_us(5);
             
-            OFF(ApFET);
-            OFF(CnFET);
-            
-            ON(CpFET);
-            ON(AnFET);
+            ON(CnFET);
+            ON(BpFET);
+
+
             
         }
+    }
+}
+
+ISR( TIMER1_OVF_vect )
+{
+    if(overflow < 10) {
+        ++overflow;
     }
 }
