@@ -2,6 +2,9 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
+/* "SimonK 30A" */
+
+#if 0
 #define CpFET_PIN           5
 #define CpFET_PORT          D
 
@@ -24,14 +27,37 @@
 #define Rcp_In_PIN          2
 #define Rcp_In_PORT         D
 
+#endif
 
-//#define Mux_C           PC5
-//#define Mux_B           PC4
-//#define Temp_Ip         PC1
-//#define Volt_Ip         PC0
+/* Afro 30A */
+#define CpFET_PIN           1
+#define CpFET_PORT          B
+
+#define BpFET_PIN           2
+#define BpFET_PORT          B
+
+#define ApFET_PIN           2
+#define ApFET_PORT          D
+
+#define CnFET_PIN              5
+#define CnFET_PORT             D
+
+#define BnFET_PIN              4
+#define BnFET_PORT             D
+
+#define AnFET_PIN              3
+#define AnFET_PORT             D
+
+#define Rcp_In_PIN          0
+#define Rcp_In_PORT         B
 
 
-//#define DebugPin           PB4
+#define RedLED_PIN 3
+#define RedLED_PORT C
+
+#define GreenLED_PIN 2
+#define GreenLED_PORT C
+
 
 #define _CONCAT(x,y) x##y
 
@@ -71,6 +97,9 @@ int main(void)
     INIT_OUT(BnFET);
     INIT_OUT(AnFET);
     
+    INIT_OUT(RedLED);
+    INIT_OUT(GreenLED);
+    
     INIT_IN(Rcp_In);
     
 
@@ -94,6 +123,8 @@ int main(void)
     uint16_t PWMMiddle = 1500;
     uint16_t PWMMin = PWMMiddle - 512;
     uint16_t PWMMax = PWMMiddle + 512;
+    
+    ON(RedLED);
 
     while(1) {
         
@@ -135,6 +166,9 @@ int main(void)
         
         if(overflow > 3) {
             Pulse = 0;
+            OFF(GreenLED);
+        } else {
+            ON(GreenLED);
         }
         
         /* pulse 0-512 */
