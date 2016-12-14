@@ -3,7 +3,7 @@ DEVICE  = atmega8
 F_CPU   = 16000000	# in Hz
 
 AVRDUDE = avrdude -c stk500v2 -P $(PORT) -p $(DEVICE) -v -b9600
-COMPILE = avr-gcc -Os -Wall -I. -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) -D__AVR_LIBC_DEPRECATED_ENABLE__ -DDEBUG_LEVEL=1 -std=c99
+COMPILE = avr-gcc -Os -Wall -I. -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) -D__AVR_LIBC_DEPRECATED_ENABLE__ -DDEBUG_LEVEL=1 -std=c99 -ggdb
 OBJECTS = main.o
 
 

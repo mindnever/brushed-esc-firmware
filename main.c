@@ -2,92 +2,38 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
-/* "SimonK 30A" */
 
-#if 0
-#define CpFET_PIN           5
-#define CpFET_PORT          D
-
-#define BpFET_PIN           4
-#define BpFET_PORT          D
-
-#define ApFET_PIN           3
-#define ApFET_PORT          D
-
-#define CnFET_PIN              2
-#define CnFET_PORT             B
-
-#define BnFET_PIN              1
-#define BnFET_PORT             B
-
-#define AnFET_PIN              0
-#define AnFET_PORT             B
+#include "Afro_30A.h"
 
 
-#define Rcp_In_PIN          2
-#define Rcp_In_PORT         D
+#define  T1_TICKS_PER_US (F_CPU/1000000)
 
-#endif
-
-/* Afro 30A */
-#define CpFET_PIN           1
-#define CpFET_PORT          B
-
-#define BpFET_PIN           2
-#define BpFET_PORT          B
-
-#define ApFET_PIN           2
-#define ApFET_PORT          D
-
-#define CnFET_PIN              5
-#define CnFET_PORT             D
-
-#define BnFET_PIN              4
-#define BnFET_PORT             D
-
-#define AnFET_PIN              3
-#define AnFET_PORT             D
-
-#define Rcp_In_PIN          0
-#define Rcp_In_PORT         B
+#define  T1_INPUT_PWM_RANGE (512 * T1_TICKS_PER_US)
+#define  T1_INPUT_PWM_MARGIN (12 * T1_TICKS_PER_US)
+#define  T1_INPUT_PWM_NEUTRAL (1500 * T1_TICKS_PER_US)
+#define  T1_INPUT_PWM_MIN (T1_INPUT_PWM_NEUTRAL - T1_INPUT_PWM_RANGE)
+#define  T1_INPUT_PWM_MAX (T1_INPUT_PWM_NEUTRAL + T1_INPUT_PWM_RANGE)
 
 
-#define RedLED_PIN 3
-#define RedLED_PORT C
+#define  T1_OUTPUT_PWM_RANGE 1024
+#define  T1_OUTPUT_TCNT_MASK (T1_OUTPUT_PWM_RANGE-1)
 
-#define GreenLED_PIN 2
-#define GreenLED_PORT C
+/* x is 0 - T1_INPUT_PWM_RANGE */
+/* x is 0 - 8192 => 0 - 1024 */
 
-
-#define _CONCAT(x,y) x##y
-
-#define _DDR(x) DDR##x
-#define _PORT(x) PORT##x
-#define _PIN(x) PIN##x
-
-#define DDR(x) _DDR(x)
-#define PORT(x) _PORT(x)
-#define PIN(x) _PIN(x)
-
-#define INIT_OUT(x) DDR(_CONCAT(x, _PORT)) |= (1 << (x ## _PIN))
-#define INIT_IN(x) DDR(_CONCAT(x, _PORT)) &= ~(1 << (x ## _PIN))
-
-#define ON(x) PORT(_CONCAT(x, _PORT)) |= (1 << (x ## _PIN))
-#define OFF(x) PORT(_CONCAT(x, _PORT)) &= ~(1 << (x ## _PIN))
-
-#define IN(x) (PIN(_CONCAT(x, _PORT)) & (1 << (x ## _PIN)))
+#define  T1_OUTPUT_PWM_PULSE(x) (x/(T1_INPUT_PWM_RANGE/T1_OUTPUT_PWM_RANGE))
 
 static volatile uint8_t overflow = 0;
 
 int main(void)
 {
-    OFF(CpFET);
-    OFF(BpFET);
-    OFF(ApFET);
+    CpFET_OFF;
+    BpFET_OFF;
+    ApFET_OFF;
     
-    OFF(CnFET);
-    OFF(BnFET);
-    OFF(AnFET);
+    CnFET_OFF;
+    BnFET_OFF;
+    AnFET_OFF;
     
     INIT_OUT(CpFET);
     INIT_OUT(BpFET);
@@ -97,8 +43,8 @@ int main(void)
     INIT_OUT(BnFET);
     INIT_OUT(AnFET);
     
-    INIT_OUT(RedLED);
-    INIT_OUT(GreenLED);
+    INIT_OUT(LED1);
+    INIT_OUT(LED2);
     
     INIT_IN(Rcp_In);
     
@@ -108,10 +54,8 @@ int main(void)
     uint16_t TCNTstart = 0;
     uint16_t Pulse = 0;
     
-    // 1MHz timer clock = 1uS precission
-    
     TCCR1A = 0;
-    TCCR1B = _BV(CS11); // prescaler: clock/8
+    TCCR1B = _BV(CS10); // prescaler: clk/1 (no prescaling)
     TIMSK = _BV(TOIE1); // overflow interrupt enable
     
     sei();
@@ -119,13 +63,7 @@ int main(void)
     uint8_t edge = 0;
     uint8_t forward = 0;
     
-    uint16_t PWMMargin = 15;
-    uint16_t PWMMiddle = 1500;
-    uint16_t PWMMin = PWMMiddle - 512;
-    uint16_t PWMMax = PWMMiddle + 512;
     
-    ON(RedLED);
-
     while(1) {
         
         if (!edge && IN(Rcp_In)) {
@@ -139,19 +77,19 @@ int main(void)
             
             edge = 0;
             
-            if((p < PWMMin) || (p > PWMMax)) {
+            if((p < T1_INPUT_PWM_MIN) || (p > T1_INPUT_PWM_MAX)) {
 
                 valid = 0;
 
-            } else if(p < (PWMMiddle - PWMMargin)) {
+            } else if(p < (T1_INPUT_PWM_NEUTRAL - T1_INPUT_PWM_MARGIN)) {
 
                 forward = 0;
-                Pulse = PWMMiddle - p;
+                Pulse = T1_OUTPUT_PWM_PULSE(T1_INPUT_PWM_NEUTRAL - p);
 
-            } else if(p > (PWMMiddle + PWMMargin)) {
+            } else if(p > (T1_INPUT_PWM_NEUTRAL + T1_INPUT_PWM_MARGIN)) {
 
                 forward = 1;
-                Pulse = p - PWMMiddle;
+                Pulse = T1_OUTPUT_PWM_PULSE(p - T1_INPUT_PWM_NEUTRAL);
 
             } else {
 
@@ -164,60 +102,57 @@ int main(void)
             
         }
         
-        if(overflow > 3) {
+        if(overflow > 2) {
             Pulse = 0;
-            OFF(GreenLED);
+            LED1_OFF;
+            LED2_ON;
         } else {
-            ON(GreenLED);
+            LED2_OFF;
+            LED1_ON;
         }
         
-        /* pulse 0-512 */
         
-        uint8_t on = (TCNT1 & 0x1FF) < Pulse;
+        uint8_t on = (TCNT1 & T1_OUTPUT_TCNT_MASK) < Pulse;
 
 //uint8_t on = TCNT1 & 0x10;
         
         if(!on) {
 #if 1
-            OFF(BpFET);
-            OFF(BnFET);
-            OFF(CpFET);
-            OFF(CnFET);
+            BpFET_OFF;
+            BnFET_OFF;
+            CpFET_OFF;
+            CnFET_OFF;
 #else
-            OFF(BpFET);
-            OFF(CpFET);
+            BpFET_OFF;
+            CpFET_OFF;
             
             _delay_us(5);
             
-            ON(BnFET);
-            ON(CnFET);
+            BnFET_ON;
+            CnFET_ON;
 #endif
         } else if(forward) {
             // Forward //
 
-            
-            OFF(BpFET);
-            OFF(CnFET);
+            BpFET_OFF;
+            CnFET_OFF;
 
             _delay_us(5);
             
-            ON(CpFET);
-            ON(BnFET);
+            CpFET_ON;
+            BnFET_ON;
 
             
         } else {
             
             // Reverse //
-            OFF(BnFET);
-            OFF(CpFET);
+            BnFET_OFF;
+            CpFET_OFF;
 
             _delay_us(5);
             
-            ON(CnFET);
-            ON(BpFET);
-
-
-            
+            CnFET_ON;
+            BnFET_ON;
         }
     }
 }
