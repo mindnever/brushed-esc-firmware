@@ -17,13 +17,17 @@
 
 #define  T1_OUTPUT_PWM_RANGE 1024
 #define  T1_OUTPUT_TCNT_MASK (T1_OUTPUT_PWM_RANGE-1)
+#define  T1_OUTPUT_PWM_OFFSET 64
 
 /* x is 0 - T1_INPUT_PWM_RANGE */
 /* x is 0 - 8192 => 0 - 1024 */
 
-#define  T1_OUTPUT_PWM_PULSE(x) (x/(T1_INPUT_PWM_RANGE/T1_OUTPUT_PWM_RANGE))
+#define  T1_OUTPUT_PWM_PULSE(x) (((x)/(T1_INPUT_PWM_RANGE/T1_OUTPUT_PWM_RANGE)) + T1_OUTPUT_PWM_OFFSET)
+//#define T1_OUTPUT_PWM_PULSE(x) ((x)>>3)
 
-static volatile uint8_t overflow = 0;
+static volatile uint8_t timeout, overflow;
+static volatile uint16_t Pulse;
+static volatile uint8_t forward;
 
 int main(void)
 {
@@ -51,73 +55,28 @@ int main(void)
 
     /* USE C & B fets for switching */
 
-    uint16_t TCNTstart = 0;
-    uint16_t Pulse = 0;
-    
     TCCR1A = 0;
-    TCCR1B = _BV(CS10); // prescaler: clk/1 (no prescaling)
-    TIMSK = _BV(TOIE1); // overflow interrupt enable
+    TCCR1B = _BV(CS10) | _BV(ICNC1) | _BV(ICES1); // prescaler: clk/1 (no prescaling), input capture noise canceler, rising edge
+    TIMSK = _BV(TOIE1) | _BV(TICIE1); // overflow interrupt enable, input capture enable
     
     sei();
     
-    uint8_t edge = 0;
-    uint8_t forward = 0;
-    
-    
     while(1) {
         
-        if (!edge && IN(Rcp_In)) {
-            TCNTstart = TCNT1;        /* capture the time when the signal when high*/
-            edge = 1;
-        }
+        uint8_t on = (TCNT1 & 0x3FF) < Pulse;
 
-        if (edge && !IN(Rcp_In)) {
-            uint16_t p = (TCNT1 - TCNTstart);
-            uint8_t valid = 1;
-            
-            edge = 0;
-            
-            if((p < T1_INPUT_PWM_MIN) || (p > T1_INPUT_PWM_MAX)) {
-
-                valid = 0;
-
-            } else if(p < (T1_INPUT_PWM_NEUTRAL - T1_INPUT_PWM_MARGIN)) {
-
-                forward = 0;
-                Pulse = T1_OUTPUT_PWM_PULSE(T1_INPUT_PWM_NEUTRAL - p);
-
-            } else if(p > (T1_INPUT_PWM_NEUTRAL + T1_INPUT_PWM_MARGIN)) {
-
-                forward = 1;
-                Pulse = T1_OUTPUT_PWM_PULSE(p - T1_INPUT_PWM_NEUTRAL);
-
-            } else {
-
-                Pulse = 0;
-            }
-            
-            if(valid) {
-                overflow = 0;
-            }
-            
-        }
-        
-        if(overflow > 2) {
-            Pulse = 0;
-            LED1_OFF;
-            LED2_ON;
-        } else {
+        if(timeout > 30) {
+            on = 0;
             LED2_OFF;
             LED1_ON;
+        } else {
+            LED1_OFF;
+            LED2_ON;
         }
-        
-        
-        uint8_t on = (TCNT1 & T1_OUTPUT_TCNT_MASK) < Pulse;
 
-//uint8_t on = TCNT1 & 0x10;
         
         if(!on) {
-#if 1
+#if 0
             BpFET_OFF;
             BnFET_OFF;
             CpFET_OFF;
@@ -126,7 +85,7 @@ int main(void)
             BpFET_OFF;
             CpFET_OFF;
             
-            _delay_us(5);
+            _delay_us(1);
             
             BnFET_ON;
             CnFET_ON;
@@ -137,7 +96,7 @@ int main(void)
             BpFET_OFF;
             CnFET_OFF;
 
-            _delay_us(5);
+            _delay_us(1);
             
             CpFET_ON;
             BnFET_ON;
@@ -149,17 +108,64 @@ int main(void)
             BnFET_OFF;
             CpFET_OFF;
 
-            _delay_us(5);
+            _delay_us(1);
             
             CnFET_ON;
-            BnFET_ON;
+            BpFET_ON;
         }
     }
 }
 
+
 ISR( TIMER1_OVF_vect )
 {
-    if(overflow < 10) {
+    if(overflow < 255) {
         ++overflow;
     }
+    if(timeout < 255) {
+        ++timeout;
+    }
+}
+
+ISR( TIMER1_CAPT_vect )
+{
+    static uint16_t risingICP;
+    
+    if( TCCR1B & _BV(ICES1) ) { // Rising edge
+
+        risingICP = ICR1;
+        
+        TCCR1B &= ~_BV(ICES1);
+        
+    } else {
+
+        uint16_t p = ICR1 - risingICP;
+
+        TCCR1B |= _BV(ICES1);
+        
+        if(overflow < 2) {
+
+            timeout = 0;
+
+            if((p < T1_INPUT_PWM_MIN) || (p > T1_INPUT_PWM_MAX)) {
+
+
+            } else if(p < (T1_INPUT_PWM_NEUTRAL - T1_INPUT_PWM_MARGIN)) {
+
+                forward = 0;
+                Pulse = T1_OUTPUT_PWM_PULSE(T1_INPUT_PWM_NEUTRAL - p);
+                
+            } else if(p > (T1_INPUT_PWM_NEUTRAL + T1_INPUT_PWM_MARGIN)) {
+
+                forward = 1;
+                Pulse = T1_OUTPUT_PWM_PULSE(p - T1_INPUT_PWM_NEUTRAL);
+
+            } else {
+
+                Pulse = 0;
+            }
+        }
+    }
+    
+    overflow = 0;
 }
