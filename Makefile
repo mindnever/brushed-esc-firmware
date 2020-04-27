@@ -1,4 +1,4 @@
-PORT = /dev/tty.SLAB_USBtoUART
+PORT = /dev/cu.SLAB_USBtoUART
 DEVICE  = atmega8
 F_CPU   = 16000000	# in Hz
 

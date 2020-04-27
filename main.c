@@ -9,7 +9,7 @@
 #define  T1_TICKS_PER_US (F_CPU/1000000)
 
 #define  T1_INPUT_PWM_RANGE (512 * T1_TICKS_PER_US)
-#define  T1_INPUT_PWM_MARGIN (12 * T1_TICKS_PER_US)
+#define  T1_INPUT_PWM_MARGIN (50 * T1_TICKS_PER_US)
 #define  T1_INPUT_PWM_NEUTRAL (1500 * T1_TICKS_PER_US)
 #define  T1_INPUT_PWM_MIN (T1_INPUT_PWM_NEUTRAL - T1_INPUT_PWM_RANGE)
 #define  T1_INPUT_PWM_MAX (T1_INPUT_PWM_NEUTRAL + T1_INPUT_PWM_RANGE)
@@ -25,7 +25,14 @@
 #define  T1_OUTPUT_PWM_PULSE(x) (((x)/(T1_INPUT_PWM_RANGE/T1_OUTPUT_PWM_RANGE)) + T1_OUTPUT_PWM_OFFSET)
 //#define T1_OUTPUT_PWM_PULSE(x) ((x)>>3)
 
-static volatile uint8_t timeout, overflow;
+// 0.0 - least filtering
+// 1.0 - most filtering
+
+#define BLINK_FREQ (F_CPU/65536)
+
+#define PWM_IN_TAU 0.97f
+
+static volatile uint8_t timeout, overflow, blink;
 static volatile uint16_t Pulse;
 static volatile uint8_t forward;
 
@@ -60,8 +67,14 @@ int main(void)
     TIMSK = _BV(TOIE1) | _BV(TICIE1); // overflow interrupt enable, input capture enable
     
     sei();
-    
+    uint32_t ticks = 0;
+    uint16_t tcntprev = TCNT1;
+
     while(1) {
+        uint16_t tcnt = TCNT1;
+        
+        ticks += (tcnt - tcntprev);
+        tcntprev = tcnt;
         
         uint8_t on = (TCNT1 & 0x3FF) < Pulse;
 
@@ -71,7 +84,16 @@ int main(void)
             LED1_ON;
         } else {
             LED1_OFF;
-            LED2_ON;
+            
+            if(Pulse) {
+                LED2_ON;
+            } else { // blink interval
+                if(blink & 0x80) {
+                    LED2_ON;
+                } else {
+                    LED2_OFF;
+                }
+            }
         }
 
         
@@ -116,7 +138,6 @@ int main(void)
     }
 }
 
-
 ISR( TIMER1_OVF_vect )
 {
     if(overflow < 255) {
@@ -125,11 +146,13 @@ ISR( TIMER1_OVF_vect )
     if(timeout < 255) {
         ++timeout;
     }
+    ++blink;
 }
 
 ISR( TIMER1_CAPT_vect )
 {
     static uint16_t risingICP;
+    static float pFiltered = T1_INPUT_PWM_NEUTRAL;
     
     if( TCCR1B & _BV(ICES1) ) { // Rising edge
 
@@ -141,6 +164,10 @@ ISR( TIMER1_CAPT_vect )
 
         uint16_t p = ICR1 - risingICP;
 
+        pFiltered = (pFiltered * PWM_IN_TAU) + (p * (1.0f - PWM_IN_TAU));
+        
+        p = pFiltered;
+        
         TCCR1B |= _BV(ICES1);
         
         if(overflow < 2) {
@@ -161,8 +188,9 @@ ISR( TIMER1_CAPT_vect )
                 Pulse = T1_OUTPUT_PWM_PULSE(p - T1_INPUT_PWM_NEUTRAL);
 
             } else {
-
+            
                 Pulse = 0;
+
             }
         }
     }

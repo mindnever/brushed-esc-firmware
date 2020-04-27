@@ -32,6 +32,33 @@
 #define LED2_PIN 2
 #define LED2_PORT C
 
+/* 3k3/18k */
+#define Volt_PIN  7
+#define Volt_PORT C
+
+#define Temp_PIN  6
+#define Temp_PORT C
+
+/* ?? */
+#define Rpm_Out_PIN 4
+#define Rpm_Out_PORT C
+
+/*
+ * Also available:
+ */
+
+#define UART_RXD_PIN  0
+#define UART_RXD_PORT D
+
+#define UART_TXD_PIN  1
+#define UART_TXD_PORT D
+
+#define I2C_SCL_PIN  5
+#define I2C_SCL_PORT C
+
+#define I2C_SDA_PIN  4
+#define I2C_SDA_PORT C
+
 
 #define ApFET_ON PIN_LOW(ApFET)
 #define BpFET_ON PIN_LOW(BpFET)
