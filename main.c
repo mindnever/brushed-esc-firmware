@@ -12,7 +12,7 @@
 #define T1_INPUT_PWM_MIN (T1_INPUT_PWM_NEUTRAL - T1_INPUT_PWM_RANGE)
 #define T1_INPUT_PWM_MAX (T1_INPUT_PWM_NEUTRAL + T1_INPUT_PWM_RANGE)
 
-#define T1_OUTPUT_PWM_RANGE 1024
+#define T1_OUTPUT_PWM_RANGE 4096
 #define T1_OUTPUT_TCNT_MASK (T1_OUTPUT_PWM_RANGE - 1)
 #define T1_OUTPUT_PWM_OFFSET 64
 
@@ -80,7 +80,7 @@ int main(void)
         ticks += (tcnt - tcntprev);
         tcntprev = tcnt;
 
-        uint8_t on = (TCNT1 & 0x3FF) < Power;
+        uint8_t on = (TCNT1 & T1_OUTPUT_TCNT_MASK) < Power;
 
         if (timeout > 30)
         {
